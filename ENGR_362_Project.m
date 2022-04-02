@@ -27,7 +27,7 @@ samplingPeriod = 1/samplingFrequency;           % sampling period
 signalLength = length(inputSignal(:,1));      	% length of signal
 time = (0:signalLength-1)*samplingPeriod;    	% time vector
 figure,plot(time,inputSignal), axis tight
-title('Time Domain Signal of Recording')	% labels
+title('Time Domain Signal of Original Recording')	% labels
 xlabel('t (s)')                             % labels
 ylabel('y(t)')                              % labels
 
@@ -42,7 +42,7 @@ f = samplingFrequency*(0:(signalLength/2))/signalLength;                   % fre
 f_kHz = f/1000;                                     % freq vector [kHz]
 figure,plot(f_kHz,F2)                               % plot 
 axis([0  max(f_kHz) 0 max(F2)])                     % axis details
-title('Frequency Domain Plot of Recorded Signal') 	% labels
+title('Frequency Domain Signal of Original Recording') 	% labels
 xlabel('F (kHz)')                                   % labels
 ylabel('Y(F)')                                      % labels
 
@@ -65,7 +65,7 @@ note_freq_int = ...
   [D3_int A3_int D4_int F_sharp_4_int]; % vector of all int note freqs
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% (7) Find true maxima and corresponding frequncy poinsamplingPeriod
+%% (7) Find true maxima and corresponding frequencies
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 hold on
 note_freq_amp = zeros(1,numberOfNotes); % amplitude of each frequency
@@ -90,10 +90,12 @@ for i = 1:numberOfNotes                 % loop through all frequencies
     
     plot(freq,maxAmp,'r*')                          %plot it
 end
+ylim([0 max(note_freq_amp) * 1.1])
+xlim([0 max(note_freq) * 1.1])
 hold off
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% (8) Compute Ideal attenuation for each filter
+%% (8) Compute ideal attenuation for each frequency component associated with each filter
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 attenuationMatrix = zeros(numberOfNotes);
@@ -102,8 +104,7 @@ for i = 1:numberOfNotes
 end
 
 attenuationMatrix = 10 * log10(ones(numberOfNotes) ./ attenuationMatrix);
-attenuationVector = min(attenuationMatrix,[],2)';
-attenuationVector(attenuationVector > -3) = -3;
+attenuationMatrix(attenuationMatrix > -3) = -3;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% (8) Experimentally study filter bank parameters
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -125,10 +126,10 @@ for i = 1:numberOfNotes
                     maxF = freq + (deltaF * freq / 100);
                     minF = freq - (deltaF * freq / 100);
 
-                    f = figure;
-                    figureName = sprintf("n = %d, Rp = %f, minF = %f, maxF = %f",...
+                    fig = figure;
+                    figureName = sprintf("n = %d, Rp = %.2f, deltaF = %.2f, minF = %.2f, maxF = %.2f",...
                         filterOrder, passbandRipple, minF, maxF);
-                    f.Name = figureName;
+                    fig.Name = figureName;
 
                     [b,a] = cheby1(filterOrder,passbandRipple,(maxF)/(samplingFrequency/2), 'low');
                     [d,c] = cheby1(filterOrder,passbandRipple,(minF)/(samplingFrequency/2), 'high');
@@ -147,17 +148,17 @@ for i = 1:numberOfNotes
                     plot(freqs(idx),h(idx));
 
                     ttl = sprintf('Frequency Response(dB) of %s Passband Filter \n n = %d, Rp = %.1f, deltaF = %d, minF = %.2f, maxF = %.2f',...
-                        name, filterOrder, passbandRipple, minF, maxF);
+                        name, filterOrder, passbandRipple, deltaF, minF, maxF);
 
                     hold("on");
-                    for note_frequency = note_freq
-                        noteF = note_frequency * 10^3;
+                    for j = 1:numberOfNotes
+                        noteF = note_freq(j) * 10^3;
                         xline(noteF);
                         absDiff = abs(freqs-noteF);
                         minPt = min(absDiff);
                         plot(noteF, h(absDiff == minPt), "r*");
+                        yline(attenuationMatrix(i,j));
                     end
-                    yline(attenuationVector(i));
                     xlabel('Frequency (Hz)');
                     ylabel('Magnitude (dB)');
                     title(ttl);
@@ -166,8 +167,8 @@ for i = 1:numberOfNotes
                     ylim([-10 1]);
                     hold ("off");
 
-                    frame = getframe(f);
-                    close(f);
+                    frame = getframe(fig);
+                    close(fig);
                     writeVideo(v,frame);
                 catch ME
                     disp(ME)
@@ -246,8 +247,8 @@ frequencyAmplitudeScales = ones(numberOfNotes,1) ./ filteredFrequencyAmplitude;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% (9) Normalize
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-normalizedSignals = zeros(length(inputSignal),4);
-
+normalizedSignals = zeros(signalLength,4);
+normalizedSignalsFFT = zeros(signalLength,4);
 for i = 1:numberOfNotes
     filteredSignal = filteredSignals(:,i);
     filteredSignalPk = filteredFrequencyAmplitude(i);
@@ -260,6 +261,8 @@ for i = 1:numberOfNotes
     F2 = F1(1:signalLength/2+1);            % half of frequency
     F2(2:end-1) = 2*F2(2:end-1);            % Discrete Fourier transform
     figure,plot(f_kHz,F2)                   % plot 
+
+    normalizedSignalsFFT(:,i) = Y;
     
     hold on
     xline(note_freq);
@@ -275,12 +278,36 @@ for i = 1:numberOfNotes
     hold ("off");
     hold off
 end
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% (9) Add Signals
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+compressedSignalFFT = sum(normalizedSignalsFFT,2) / max(frequencyAmplitudeScales);
+F1 = abs(compressedSignalFFT/signalLength);               % frequency
+F2 = F1(1:signalLength/2+1);            % half of frequency
+F2(2:end-1) = 2*F2(2:end-1);            % Discrete Fourier transform
+figure,plot(f_kHz,F2)                   % plot 
+title('Frequency Domain Representation of Compressed Signal') % labels
+xlabel('F (kHz)')                                   % labels
+ylabel('Y(F)')                                      % labels
+hold on
+xline(note_freq);
+plot(note_freq, F2(note_freq_int), "r*");
+xlim([0 note_freq(end)*1.1])
+ylim([0 max(F2)*1.1]);
+hold off
+
+compressedSignal = ifft(compressedSignalFFT);
+figure,plot(time,compressedSignal), axis tight
+title('Time Domain Representation of Compressed Signal')      % labels
+xlabel('t (s)')                             % labels
+ylabel('y(t)')                              % labels
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% (9) Add Signals
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 compressedSignal = sum(normalizedSignals,2) / max(frequencyAmplitudeScales);
 
 figure,plot(time,compressedSignal), axis tight
-title('Compressed Time Domain Signal')      % labels
+title('Time Domain Representation of Compressed Signal')      % labels
 xlabel('t (s)')                             % labels
 ylabel('y(t)')                              % labels
 
@@ -291,7 +318,7 @@ F2(2:end-1) = 2*F2(2:end-1);                        % Discrete Fourier transform
 figure,plot(f_kHz,F2)                               % plot 
 xlim([0 note_freq(end)*1.1])
 ylim([0 max(F2)*1.1]);
-title('Frequency Domain Plot of Compressed Signal') % labels
+title('Frequency Domain Representation of Compressed Signal') % labels
 xlabel('F (kHz)')                                   % labels
 ylabel('Y(F)')                                      % labels
 hold on
