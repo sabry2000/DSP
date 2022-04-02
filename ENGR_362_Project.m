@@ -27,7 +27,7 @@ samplingPeriod = 1/samplingFrequency;           % sampling period
 signalLength = length(inputSignal(:,1));      	% length of signal
 time = (0:signalLength-1)*samplingPeriod;    	% time vector
 figure,plot(time,inputSignal), axis tight
-title('Time Domain Signal of Original Recording')	% labels
+title('Time Domain Representation of Original Recording')	% labels
 xlabel('t (s)')                             % labels
 ylabel('y(t)')                              % labels
 
@@ -42,7 +42,7 @@ f = samplingFrequency*(0:(signalLength/2))/signalLength;                   % fre
 f_kHz = f/1000;                                     % freq vector [kHz]
 figure,plot(f_kHz,F2)                               % plot 
 axis([0  max(f_kHz) 0 max(F2)])                     % axis details
-title('Frequency Domain Signal of Original Recording') 	% labels
+title('Frequency Domain Representation of Original Recording') 	% labels
 xlabel('F (kHz)')                                   % labels
 ylabel('Y(F)')                                      % labels
 
@@ -81,7 +81,7 @@ for i = 1:numberOfNotes                 % loop through all frequencies
             maxAmpIdx = freqIdx;
         end
     end
-    
+        
     freq = f_kHz(maxAmpIdx);                        %get the frequency, index, and amplitude
     
     note_freq(i) = freq;
@@ -100,13 +100,15 @@ hold off
 
 attenuationMatrix = zeros(numberOfNotes);
 for i = 1:numberOfNotes
-    attenuationMatrix(i,:) = note_freq_amp / note_freq_amp(i);
+    attenuationMatrix(i,:) = note_freq_amp / (note_freq_amp(i)/2);
 end
 
 attenuationMatrix = 10 * log10(ones(numberOfNotes) ./ attenuationMatrix);
 attenuationMatrix(attenuationMatrix > -3) = -3;
+z = zeros(numberOfNotes,1);
+attenuationMatrix(1:(numberOfNotes+1):end) = z;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% (8) Experimentally study filter bank parameters
+%% (9) Experimentally study filter bank parameters
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 filterOrders = 1:5;
 passRippleRipples = [0.1,0.5,1,2,5,10];
@@ -180,14 +182,14 @@ for i = 1:numberOfNotes
     close(v);
 end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% (9) Create filter bank with optimal parameters and record frequency amplitude
+%% (10) Create filter bank with optimal parameters and record frequency amplitude
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % Each value in each array corresponds to the optimal parameters for each
 % passband filter
 filterOrders = [3 5 3 4];
 passBandRipples = [2 2 5 8];
-deltaFs = [5 0.01 1 5];
+deltaFs = [2 0.01 1 1];
 names = ["D3","A3","D4","F#4"];
 
 filteredSignals = zeros(signalLength,numberOfNotes);
@@ -245,11 +247,12 @@ end
 
 frequencyAmplitudeScales = ones(numberOfNotes,1) ./ filteredFrequencyAmplitude;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% (9) Normalize
+%% (11) Normalize Filtered Signals with Respect to the Passband Frequency Ampitude
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 normalizedSignals = zeros(signalLength,4);
 normalizedSignalsFFT = zeros(signalLength,4);
 for i = 1:numberOfNotes
+    name = names(i);
     filteredSignal = filteredSignals(:,i);
     filteredSignalPk = filteredFrequencyAmplitude(i);
     
@@ -268,7 +271,7 @@ for i = 1:numberOfNotes
     xline(note_freq);
     plot(note_freq, F2(note_freq_int), "r*");
     
-    title('Y(F) vs F')                  	% labels
+    title(sprintf('Normalized Filtered %s Frequency Domain Signal', name)) % labels
     xlabel('F (kHz)')                       % labels
     ylabel('Y(F)')                          % labels
     grid("on");
@@ -279,7 +282,7 @@ for i = 1:numberOfNotes
     hold off
 end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% (9) Add Signals
+%% (12) Add Signals in the Frequency Domain
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 compressedSignalFFT = sum(normalizedSignalsFFT,2) / max(frequencyAmplitudeScales);
 F1 = abs(compressedSignalFFT/signalLength);               % frequency
@@ -302,7 +305,7 @@ title('Time Domain Representation of Compressed Signal')      % labels
 xlabel('t (s)')                             % labels
 ylabel('y(t)')                              % labels
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% (9) Add Signals
+%% (13) Add Signals in the Time Domain
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 compressedSignal = sum(normalizedSignals,2) / max(frequencyAmplitudeScales);
 
