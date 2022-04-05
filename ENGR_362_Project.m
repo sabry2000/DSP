@@ -95,94 +95,62 @@ xlim([0 max(note_freq) * 1.1])
 hold off
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% (8) Compute ideal attenuation for each frequency component associated with each filter
+%% (8) Plot Frequency Response of each filter
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-attenuationMatrix = zeros(numberOfNotes);
-for i = 1:numberOfNotes
-    attenuationMatrix(i,:) = note_freq_amp / (note_freq_amp(i)/2);
-end
-
-attenuationMatrix = 10 * log10(ones(numberOfNotes) ./ attenuationMatrix);
-attenuationMatrix(attenuationMatrix > -3) = -3;
-z = zeros(numberOfNotes,1);
-attenuationMatrix(1:(numberOfNotes+1):end) = z;
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% (9) Experimentally study filter bank parameters
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-filterOrders = 1:5;
-passRippleRipples = [0.1,0.5,1,2,5,10];
-deltaFs = [0,1,5,10,20];
+filterOrders = [3 5 3 4];
+passBandRipples = [2 2 5 8];
+deltaFs = [2 0.01 1 1];
 names = ["D3","A3","D4","F#4"];
 
 for i = 1:numberOfNotes
-    freq = note_freq(i) * 10^3;
+    freq = note_freq(i) * 1000;
+    filterOrder = filterOrders(i);
+    passBandRipple = passBandRipples(i);
+    deltaF = deltaFs(i);
     name = names(i);
-    v = VideoWriter(sprintf('%s.avi',name));
-    open(v);
-    for filterOrder = filterOrders
-        for passbandRipple = passRippleRipples
-            for deltaF = deltaFs
-                try
-                    
-                    maxF = freq + (deltaF * freq / 100);
-                    minF = freq - (deltaF * freq / 100);
 
-                    fig = figure;
-                    figureName = sprintf("n = %d, Rp = %.2f, deltaF = %.2f, minF = %.2f, maxF = %.2f",...
-                        filterOrder, passbandRipple, minF, maxF);
-                    fig.Name = figureName;
+    ttl = sprintf('Magnitude Response (dB) of %s Passband Filter', name);
 
-                    [b,a] = cheby1(filterOrder,passbandRipple,(maxF)/(samplingFrequency/2), 'low');
-                    [d,c] = cheby1(filterOrder,passbandRipple,(minF)/(samplingFrequency/2), 'high');
-                    
-                    lpf = tf(a,b);
-                    hpf = tf(c,d);
+    maxF = freq + (deltaF * freq / 100);
+    minF = freq - (deltaF * freq / 100);
 
-                    bpf = series(lpf,hpf);
-                    [num,den] = tfdata(bpf, 'v');
+    [b, a] = cheby1(filterOrder,passBandRipple,(maxF)/(samplingFrequency/2),'low');
+    [d, c] = cheby1(filterOrder,passBandRipple,(minF)/(samplingFrequency/2),'high');
 
-                    [h,freqs] = freqz(den,num,[],samplingFrequency);
-                    h = db(h);
+    lpf = tf(a,b);
+    hpf = tf(c,d);
 
-                    idx = find(freqs < (10 * freqs));
+    bpf = series(lpf,hpf);
 
-                    plot(freqs(idx),h(idx));
+    [num,den] = tfdata(bpf, 'v');
 
-                    ttl = sprintf('Frequency Response(dB) of %s Passband Filter \n n = %d, Rp = %.1f, deltaF = %d, minF = %.2f, maxF = %.2f',...
-                        name, filterOrder, passbandRipple, deltaF, minF, maxF);
+    [h,frequencies] = freqz(den,num);
+    h = db(h);
+    frequencies = frequencies * (samplingFrequency) / (2* pi);
 
-                    hold("on");
-                    for j = 1:numberOfNotes
-                        noteF = note_freq(j) * 10^3;
-                        xline(noteF);
-                        absDiff = abs(freqs-noteF);
-                        minPt = min(absDiff);
-                        plot(noteF, h(absDiff == minPt), "r*");
-                        yline(attenuationMatrix(i,j));
-                    end
-                    xlabel('Frequency (Hz)');
-                    ylabel('Magnitude (dB)');
-                    title(ttl);
-                    grid("on");
-                    axis("tight");
-                    ylim([-10 1]);
-                    hold ("off");
+    figure;
+    hold on
+    plot(frequencies, h);
+    xline(maxF, 'r');
+    xline(minF, 'g');
+    axis tight
+    xlim([0, F_sharp_4*1.1]);
 
-                    frame = getframe(fig);
-                    close(fig);
-                    writeVideo(v,frame);
-                catch ME
-                    disp(ME)
-                    fprintf("%s: Failed\n", name);
-                end
-            end
-        end
+    xlabel('Frequency (Hz)');
+    ylabel('Magnitude (dB)');
+    title(ttl);
+    
+    for note_frequency = note_freq
+        fq = note_frequency * 1000;
+        xline(fq);
+        absDiff = abs(frequencies-fq);
+        minPt = min(absDiff);
+        plot(fq, h(absDiff == minPt), "r*");
     end
-    close(v);
+    hold off
 end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% (10) Create filter bank with optimal parameters and record frequency amplitude
+%% (9) Create filter bank with optimal parameters and record frequency amplitude
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % Each value in each array corresponds to the optimal parameters for each
@@ -205,10 +173,10 @@ for i = 1:numberOfNotes
     maxF = freq + (deltaF * freq / 100);
     minF = freq - (deltaF * freq / 100);
     
-    [b, a] = cheby1(filterOrder,passBandRipple,(freq+deltaF)/(samplingFrequency/2),'low');
+    [b, a] = cheby1(filterOrder,passBandRipple,maxF/(samplingFrequency/2),'low');
     y = filter(b,a,inputSignal);
     
-    [b, a] = cheby1(filterOrder,passBandRipple,(freq-deltaF)/(samplingFrequency/2),'high');
+    [b, a] = cheby1(filterOrder,passBandRipple,minF/(samplingFrequency/2),'high');
     y = filter(b,a,y);
     
     filteredSignals(:,i) = y;
@@ -247,7 +215,7 @@ end
 
 frequencyAmplitudeScales = ones(numberOfNotes,1) ./ filteredFrequencyAmplitude;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% (11) Normalize Filtered Signals with Respect to the Passband Frequency Ampitude
+%% (10) Normalize Filtered Signals with Respect to the Passband Frequency Ampitude
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 normalizedSignals = zeros(signalLength,4);
 normalizedSignalsFFT = zeros(signalLength,4);
@@ -282,7 +250,7 @@ for i = 1:numberOfNotes
     hold off
 end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% (12) Add Signals in the Frequency Domain
+%% (11) Add Signals in the Frequency Domain
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 compressedSignalFFT = sum(normalizedSignalsFFT,2) / max(frequencyAmplitudeScales);
 F1 = abs(compressedSignalFFT/signalLength);               % frequency
@@ -305,7 +273,7 @@ title('Time Domain Representation of Compressed Signal')      % labels
 xlabel('t (s)')                             % labels
 ylabel('y(t)')                              % labels
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% (13) Add Signals in the Time Domain
+%% (12) Add Signals in the Time Domain
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 compressedSignal = sum(normalizedSignals,2) / max(frequencyAmplitudeScales);
 
