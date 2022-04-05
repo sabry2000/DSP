@@ -140,6 +140,7 @@ for i = 1:numberOfNotes
     ylabel('Magnitude (dB)');
     title(ttl);
     
+    %Find the point closest to the note frequency
     for note_frequency = note_freq
         fq = note_frequency * 1000;
         xline(fq);
@@ -181,6 +182,7 @@ for i = 1:numberOfNotes
     
     filteredSignals(:,i) = y;
     
+    % Plot the Time Domain Signal
     figure,plot(time,y), axis tight
     hold on
     title(sprintf('Filtered %s Time Domain Signal', name))                  	% labels
@@ -193,9 +195,12 @@ for i = 1:numberOfNotes
     F1 = abs(Y/signalLength);                        % frequency
     F2 = F1(1:signalLength/2+1);                     % half of frequency
     F2(2:end-1) = 2*F2(2:end-1);            % Discrete Fourier transform
+    
+    %Plot the frequency domain signal
     figure,plot(f_kHz,F2)                   % plot 
     axis([0  max(f_kHz) 0 max(F2)])         % axis details
     
+    % get the amplitude of the peak frequency component
     pk = max(F2);
     filteredFrequencyAmplitude(i) = pk;
     
@@ -250,9 +255,9 @@ for i = 1:numberOfNotes
     hold off
 end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% (11) Add Signals in the Frequency Domain
+%% (11) Add Signals and Scale in the Frequency Domain
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-compressedSignalFFT = sum(normalizedSignalsFFT,2) / max(frequencyAmplitudeScales);
+compressedSignalFFT = sum(normalizedSignalsFFT,2) / min(frequencyAmplitudeScales);
 F1 = abs(compressedSignalFFT/signalLength);               % frequency
 F2 = F1(1:signalLength/2+1);            % half of frequency
 F2(2:end-1) = 2*F2(2:end-1);            % Discrete Fourier transform
@@ -273,9 +278,9 @@ title('Time Domain Representation of Compressed Signal')      % labels
 xlabel('t (s)')                             % labels
 ylabel('y(t)')                              % labels
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% (12) Add Signals in the Time Domain
+%% (12) Add Signals and Scale in the Time Domain
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-compressedSignal = sum(normalizedSignals,2) / max(frequencyAmplitudeScales);
+compressedSignal = sum(normalizedSignals,2) / min(frequencyAmplitudeScales);
 
 figure,plot(time,compressedSignal), axis tight
 title('Time Domain Representation of Compressed Signal')      % labels
@@ -297,8 +302,70 @@ xline(note_freq);
 plot(note_freq, F2(note_freq_int), "r*");
 hold off
 
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% (13) Equivalent Transfer Function
+%% (13) Simulink Model Input
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+simin = [time' inputSignal];
+
+filterOrders = [3 5 3 4];
+passBandRipples = [2 2 5 8];
+deltaFs = [2 0.01 1 1];
+
+sys = tf(zeros(1,1,numberOfNotes*2));
+
+for i = 1:numberOfNotes
+    freq = note_freq(i) * 1000;
+    filterOrder = filterOrders(i);
+    passBandRipple = passBandRipples(i);
+    deltaF = deltaFs(i);
+    filteredSignalPk = filteredFrequencyAmplitude(i);
+    
+    maxF = freq + (deltaF * freq / 100);
+    minF = freq - (deltaF * freq / 100);
+    
+    [b, a] = cheby1(filterOrder,passBandRipple,(freq+deltaF)/(samplingFrequency/2),'low');
+    lpf = tf(a,b);
+    sys(:,:,i) = lpf;
+    
+    [d, c] = cheby1(filterOrder,passBandRipple,(freq-deltaF)/(samplingFrequency/2),'high');
+    hpf = tf (c,d);
+
+    sys(:,:,i+4) = hpf;
+end
+
+D3LPF = sys(:,:,1);
+[D3LPFNUM,D3LPFDEN] = tfdata(D3LPF, 'v');
+
+D3HPF = sys(:,:,5);
+[D3HPFNUM,D3HPFDEN] = tfdata(D3HPF, 'v');
+
+A3LPF = sys(:,:,2);
+[A3LPFNUM,A3LPFDEN] = tfdata(A3LPF, 'v');
+
+A3HPF = sys(:,:,6);
+[A3HPFNUM,A3HPFDEN] = tfdata(A3HPF, 'v');
+
+D4LPF = sys(:,:,3);
+[D4LPFNUM,D4LPFDEN] = tfdata(D4LPF, 'v');
+
+D4HPF = sys(:,:,7);
+[D4HPFNUM,D4HPFDEN] = tfdata(D4HPF, 'v');
+
+FS4LPF = sys(:,:,4);
+[FS4LPFNUM,FS4LPFDEN] = tfdata(FS4LPF, 'v');
+
+FS4HPF = sys(:,:,8);
+[FS4HPFNUM,FS4HPFDEN] = tfdata(FS4HPF, 'v');
+
+D3Gain = frequencyAmplitudeScales(1);
+A3Gain = frequencyAmplitudeScales(2);
+D4Gain = frequencyAmplitudeScales(3);
+FS4Gain = frequencyAmplitudeScales(4);
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% (14) Equivalent Transfer Function
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 filterOrders = [3 5 3 4];
