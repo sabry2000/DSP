@@ -213,6 +213,7 @@ for i = 1:numberOfNotes
     hold off
 end
 
+% inverse of the amplitudes
 frequencyAmplitudeScales = ones(numberOfNotes,1) ./ filteredFrequencyAmplitude;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% (10) Normalize Filtered Signals with Respect to the Passband Frequency Ampitude
@@ -222,7 +223,6 @@ normalizedSignalsFFT = zeros(signalLength,4);
 for i = 1:numberOfNotes
     name = names(i);
     filteredSignal = filteredSignals(:,i);
-    filteredSignalPk = filteredFrequencyAmplitude(i);
     
     normalizedSignal = filteredSignal * frequencyAmplitudeScales(i);
     normalizedSignals(:,i) = normalizedSignal;
@@ -296,3 +296,84 @@ hold on
 xline(note_freq);
 plot(note_freq, F2(note_freq_int), "r*");
 hold off
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% (13) Equivalent Transfer Function
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+filterOrders = [3 5 3 4];
+passBandRipples = [2 2 5 8];
+deltaFs = [2 0.01 1 1];
+
+sys = tf(zeros(1,1,numberOfNotes));
+
+for i = 1:numberOfNotes
+    freq = note_freq(i) * 1000;
+    filterOrder = filterOrders(i);
+    passBandRipple = passBandRipples(i);
+    deltaF = deltaFs(i);
+    filteredSignalPk = filteredFrequencyAmplitude(i);
+    
+    maxF = freq + (deltaF * freq / 100);
+    minF = freq - (deltaF * freq / 100);
+    
+    [b, a] = cheby1(filterOrder,passBandRipple,(freq+deltaF)/(samplingFrequency/2),'low');
+    lpf = tf(a,b);
+    
+    [d, c] = cheby1(filterOrder,passBandRipple,(freq-deltaF)/(samplingFrequency/2),'high');
+    hpf = tf (c,d);
+
+    bpf = series(lpf,hpf) / filteredSignalPk;
+    sys(:,:,i) = bpf;
+end
+
+equivalentTF1 = parallel(sys(:,:,1), sys(:,:,2));
+equivalentTF2 = parallel(sys(:,:,3), sys(:,:,4));
+
+equivalentTF = parallel(equivalentTF1, equivalentTF2);
+[num,den] = tfdata(equivalentTF, 'v');
+
+[h,frequencies] = freqz(den,num);
+h = db(h);
+frequencies = frequencies * (samplingFrequency) / (2* pi);
+
+figure;
+hold on
+plot(frequencies, h);
+axis tight
+xlim([0, F_sharp_4*1.1]);
+
+xlabel('Frequency (Hz)');
+ylabel('Magnitude (dB)');
+title('Equivalent Transfer Function Frequency Response');
+
+for note_frequency = note_freq
+    fq = note_frequency * 1000;
+    xline(fq);
+    absDiff = abs(frequencies-fq);
+    minPt = min(absDiff);
+    plot(fq, h(absDiff == minPt), "r*");
+end
+hold off
+
+% compressedSignal2 = filter(den,num,inputSignal);
+% figure,plot(time,compressedSignal2), axis tight
+% title('Time Domain Representation of Compressed Signal')      % labels
+% xlabel('t (s)')                             % labels
+% ylabel('y(t)')                              % labels
+% 
+% Y = fft(compressedSignal2);                         % Discrete Fourier transform
+% F1 = abs(Y/signalLength);                           % frequency
+% F2 = F1(1:signalLength/2+1);                        % half of frequency
+% F2(2:end-1) = 2*F2(2:end-1);                        % Discrete Fourier transform
+% figure,plot(f_kHz,F2)                               % plot 
+% xlim([0 note_freq(end)*1.1]);
+% maxY = max(F2)*1.1;
+% ylim([0 maxY]);
+% title('Frequency Domain Representation of Compressed Signal') % labels
+% xlabel('F (kHz)')                                   % labels
+% ylabel('Y(F)')                                      % labels
+% hold on
+% xline(note_freq);
+% plot(note_freq, F2(note_freq_int), "r*");
+% hold off
